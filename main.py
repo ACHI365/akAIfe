@@ -425,4 +425,4 @@ def open_url_in_browser(url: str) -> str:
 
 
 if __name__ == "__main__":
-    print(plan_journey("Tbilisi", "Batumi", "today"))
+    mcp.run()

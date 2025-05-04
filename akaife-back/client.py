@@ -39,7 +39,6 @@ class MCPClient:
 
         response = await self.session.list_tools()
         tools = response.tools
-        print("\nConnected to server with tools:", [tool.name for tool in tools])
 
     async def process_query(self, query: str) -> str:
         # Add the user's query to the message history
@@ -99,34 +98,21 @@ class MCPClient:
 
         return "\n".join(final_text)
 
-    async def chat_loop(self):
-        print("\nMCP Client Started!")
-        print("Type your queries or 'quit' to exit.")
-
-        while True:
-            try:
-                query = input("\nQuery: ").strip()
-                if query.lower() == 'quit':
-                    break
-
-                response = await self.process_query(query)
-                print("\n" + response)
-
-            except Exception as e:
-                print(f"\nError: {str(e)}")
+    
 
     async def cleanup(self):
         await self.exit_stack.aclose()
 
 async def main():
-    if len(sys.argv) < 2:
-        print("Usage: python client.py <path_to_server_script>")
+    if len(sys.argv) < 3:
         sys.exit(1)
 
+    query = sys.argv[2]  # Capture query from command line argument
     client = MCPClient()
     try:
         await client.connect_to_server(sys.argv[1])
-        await client.chat_loop()
+        response = await client.process_query(query)
+        print(response)
     finally:
         await client.cleanup()
 
