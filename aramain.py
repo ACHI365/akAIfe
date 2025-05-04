@@ -51,11 +51,15 @@ db = None
 sightseeing_collection = None
 try:
     print("Attempting to connect to MongoDB Atlas...", file=sys.stderr)
+    uri = os.getenv("MONGODB_URI")
     mongo_client = MongoClient(
         MONGODB_URI,
         serverSelectionTimeoutMS=5000,
         appName="MCPSightseeingGuide",
     )
+    mongo_client.admin.command("ismaster")
+    db = mongo_client.get_database(os.getenv("MONGODB_DATABASE"))
+    coll = db.get_collection(os.getenv("MONGODB_COLLECTION"))
     mongo_client.admin.command("ismaster")
     print(
         f"Successfully connected to MongoDB Atlas. Database: '{MONGODB_DATABASE}', Collection: '{MONGODB_COLLECTION}'", file=sys.stderr

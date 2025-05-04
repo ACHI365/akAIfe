@@ -140,9 +140,11 @@ def get_stations() -> StationsResponse:
         raise
 
 
-@mcp.resource(uri="resource://current_time", name="Current Time", mime_type="text/plain")
+@mcp.tool(name="Current_Time")
 def get_current_time() -> str:
-    """Returns server's current ISO-formatted time"""
+    """
+        Retrieve Current time Whenever you need to book or plan something
+    """
     return datetime.now().isoformat()
 
 
@@ -286,12 +288,12 @@ def list_rental_locations() -> list[dict]:
 
 @mcp.tool(name="Search_Rental_Cars")
 def search_rental_cars(
-        price_from: Optional[int] = None,
-        price_to: Optional[int] = None,
+        price_from: int = 0,
+        price_to: int = 10000,
         currency_id: int = 1,
         gear_types: str = "1.2",
         locs: int = 2,
-        wheel_types: Optional[int] = None
+        wheel_types: int = 0
 ) -> List[Dict]:
     """
     Fetch up to five of the best rental-car listings matching the given filters.
@@ -347,14 +349,10 @@ def search_rental_cars(
         "MileageType": 1,
         "GearTypes": gear_types
     }
-    if price_from is not None:
-        params["PriceFrom"] = price_from
-    if price_to is not None:
-        params["PriceTo"] = price_to
-    if locs is not None:
-        params["Locs"] = locs
-    if wheel_types is not None:
-        params["WheelTypes"] = wheel_types
+    params["PriceFrom"] = price_from
+    params["PriceTo"] = price_to
+    params["Locs"] = locs
+    params["WheelTypes"] = wheel_types
 
     all_cars = []
     page = 1
@@ -392,7 +390,7 @@ def search_rental_cars(
 
 
 @mcp.tool(name="Get_Some_Spots_Around_Location")
-def get_some_spots_around_location(location: tuple[int, int], radius: int = 1000,
+def get_some_spots_around_location(location: tuple[float, float], radius: int = 1000,
                                    place_types: Optional[List[str]] = None) -> dict[str, list[dict[str, Any]]]:
     """
     Returns a list of places (restaurants, bars, cafes, partks etc) around the given location.
@@ -425,4 +423,4 @@ def open_url_in_browser(url: str) -> str:
 
 
 if __name__ == "__main__":
-    print(plan_journey("Tbilisi", "Batumi", "today"))
+    mcp.run()
