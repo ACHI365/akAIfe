@@ -11,6 +11,7 @@ from mcp.server.fastmcp import FastMCP
 import webbrowser
 
 from utils import resolve_station_code
+from mapsAPIutils import search_places_nearby
 
 mcp = FastMCP("GR Fetch")
 
@@ -233,6 +234,25 @@ def plan_journey(origin: str, destination: str, when: str) -> Dict[str, Any]:
     }
 
 
+@mcp.tool(name="Get_Some_Spots_Around_Location")
+def get_some_spots_around_location(location: tuple[int, int], radius: int = 1000, place_types: Optional[List[str]] = None) -> List[Dict[str, Any]]:
+    """
+    Returns a list of places (restaurants, bars, cafes, partks etc) around the given location.
+    """
+    result = search_places_nearby(location, radius, place_types)
+    return {
+        "places": [
+            {
+                "name": place.get("name"),
+                "address": place.get("vicinity"),
+                "location": place.get("geometry", {}).get("location"),
+                "place_id": place.get("place_id"),
+                "user_ratings_total": place.get("user_ratings_total")
+            }
+            for place in result
+        ]
+    }
+
 @mcp.tool(name="Open_URL_in_Browser")
 def open_url_in_browser(url: str) -> str:
     """
@@ -246,4 +266,4 @@ def open_url_in_browser(url: str) -> str:
 
 
 if __name__ == "__main__":
-    print(plan_journey("Tbilisi", "Batumi", "today"))
+    mcp.run()
