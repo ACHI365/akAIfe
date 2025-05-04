@@ -11,12 +11,14 @@ from mcp.server.fastmcp import FastMCP
 import webbrowser
 import http.cookiejar
 
+from mapsAPIutils import search_places_nearby
 from utils import resolve_station_code
 
 mcp = FastMCP("GR Fetch")
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
+
 
 class BaseStation(BaseModel):
     id: int
@@ -143,6 +145,7 @@ def get_current_time() -> str:
     """Returns server's current ISO-formatted time"""
     return datetime.now().isoformat()
 
+
 @mcp.tool(name="Plan_Journey")
 def plan_journey(origin: str, destination: str, when: str) -> Dict[str, Any]:
     """
@@ -234,6 +237,8 @@ def plan_journey(origin: str, destination: str, when: str) -> Dict[str, Any]:
         "rides": [r.model_dump() for r in rides],
         "purchase_url": purchase_url
     }
+
+
 @mcp.tool(name="List_Rental_Locations")
 def list_rental_locations() -> list[dict]:
     """
@@ -259,11 +264,11 @@ def list_rental_locations() -> list[dict]:
         urllib.request.HTTPCookieProcessor(cj)
     )
     opener.addheaders = [
-        ("User-Agent",       "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"),
-        ("Accept",           "application/json, text/plain, */*"),
-        ("Accept-Language",  "en-US,en;q=0.9"),
-        ("Referer",          "https://www.myauto.ge/"),
-        ("Origin",           "https://www.myauto.ge"),
+        ("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"),
+        ("Accept", "application/json, text/plain, */*"),
+        ("Accept-Language", "en-US,en;q=0.9"),
+        ("Referer", "https://www.myauto.ge/"),
+        ("Origin", "https://www.myauto.ge"),
         ("X-Requested-With", "XMLHttpRequest"),
     ]
 
@@ -281,12 +286,12 @@ def list_rental_locations() -> list[dict]:
 
 @mcp.tool(name="Search_Rental_Cars")
 def search_rental_cars(
-    price_from: Optional[int] = None,
-    price_to: Optional[int] = None,
-    currency_id: int = 1,
-    gear_types: str = "1.2",
-    locs: int = 2,
-    wheel_types: Optional[int] = None
+        price_from: Optional[int] = None,
+        price_to: Optional[int] = None,
+        currency_id: int = 1,
+        gear_types: str = "1.2",
+        locs: int = 2,
+        wheel_types: Optional[int] = None
 ) -> List[Dict]:
     """
     Fetch up to five of the best rental-car listings matching the given filters.
@@ -325,22 +330,22 @@ def search_rental_cars(
         urllib.request.HTTPCookieProcessor(cj)
     )
     opener.addheaders = [
-        ("User-Agent",       "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"),
-        ("Accept",           "application/json, text/plain, */*"),
-        ("Accept-Language",  "en-US,en;q=0.9"),
-        ("Referer",          "https://www.myauto.ge/"),
-        ("Origin",           "https://www.myauto.ge"),
+        ("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"),
+        ("Accept", "application/json, text/plain, */*"),
+        ("Accept-Language", "en-US,en;q=0.9"),
+        ("Referer", "https://www.myauto.ge/"),
+        ("Origin", "https://www.myauto.ge"),
         ("X-Requested-With", "XMLHttpRequest"),
     ]
     opener.open("https://www.myauto.ge/ka")  # seed cookies
 
     base_url = "https://api2.myauto.ge/ka/products"
     params = {
-        "TypeID":      0,
-        "ForRent":     1,
-        "CurrencyID":  currency_id,
+        "TypeID": 0,
+        "ForRent": 1,
+        "CurrencyID": currency_id,
         "MileageType": 1,
-        "GearTypes":   gear_types
+        "GearTypes": gear_types
     }
     if price_from is not None:
         params["PriceFrom"] = price_from
@@ -375,15 +380,37 @@ def search_rental_cars(
     for car in top_five:
         cid = car["car_id"]
         results.append({
-            "car_id":    cid,
-            "model":     car.get("car_model"),
-            "year":      car.get("prod_year"),
+            "car_id": cid,
+            "model": car.get("car_model"),
+            "year": car.get("prod_year"),
             "price_usd": car.get("price_usd"),
-            "views":     car.get("views"),
-            "link":      f"https://www.myauto.ge/ka/pr/{cid}"
+            "views": car.get("views"),
+            "link": f"https://www.myauto.ge/ka/pr/{cid}"
         })
 
     return results
+
+
+@mcp.tool(name="Get_Some_Spots_Around_Location")
+def get_some_spots_around_location(location: tuple[int, int], radius: int = 1000,
+                                   place_types: Optional[List[str]] = None) -> dict[str, list[dict[str, Any]]]:
+    """
+    Returns a list of places (restaurants, bars, cafes, partks etc) around the given location.
+    """
+    result = search_places_nearby(location, radius, place_types)
+    return {
+        "places": [
+            {
+                "name": place.get("name"),
+                "address": place.get("vicinity"),
+                "location": place.get("geometry", {}).get("location"),
+                "place_id": place.get("place_id"),
+                "user_ratings_total": place.get("user_ratings_total")
+            }
+            for place in result
+        ]
+    }
+
 
 @mcp.tool(name="Open_URL_in_Browser")
 def open_url_in_browser(url: str) -> str:
@@ -398,4 +425,4 @@ def open_url_in_browser(url: str) -> str:
 
 
 if __name__ == "__main__":
-    print(search_rental_cars(locs=4))
+    print(plan_journey("Tbilisi", "Batumi", "today"))
