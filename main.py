@@ -9,11 +9,14 @@ from datetime import datetime, timedelta
 from pydantic import BaseModel
 from mcp.server.fastmcp import FastMCP
 import webbrowser
+import http.cookiejar
 
 from utils import resolve_station_code
 
 mcp = FastMCP("GR Fetch")
 
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
 
 class BaseStation(BaseModel):
     id: int
@@ -231,7 +234,156 @@ def plan_journey(origin: str, destination: str, when: str) -> Dict[str, Any]:
         "rides": [r.model_dump() for r in rides],
         "purchase_url": purchase_url
     }
+@mcp.tool(name="List_Rental_Locations")
+def list_rental_locations() -> list[dict]:
+    """
+    Fetches all available rental-location IDs and names from MyAuto.ge.
 
+    Args: None
+
+    Returns:
+        List[Dict]: A list of location objects, each containing:
+            - id (int): Location ID
+            - name (str): Human-readable location name
+            - parent_loc_id (int): Parent location ID, if any
+            - ...any other fields the API provides
+    """
+    # Prepare SSL context
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+
+    # Build a cookie-aware opener with browser headers
+    cj = http.cookiejar.CookieJar()
+    opener = urllib.request.build_opener(
+        urllib.request.HTTPCookieProcessor(cj)
+    )
+    opener.addheaders = [
+        ("User-Agent",       "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"),
+        ("Accept",           "application/json, text/plain, */*"),
+        ("Accept-Language",  "en-US,en;q=0.9"),
+        ("Referer",          "https://www.myauto.ge/"),
+        ("Origin",           "https://www.myauto.ge"),
+        ("X-Requested-With", "XMLHttpRequest"),
+    ]
+
+    # Seed cookies by "visiting" the main site
+    opener.open("https://www.myauto.ge/ka")
+
+    # Now fetch the rental locations
+    url = "https://api2.myauto.ge/ka/vehicle/locations"
+    req = urllib.request.Request(url)  # headers already on opener
+    with opener.open(req, timeout=10) as resp:
+        if resp.status != 200:
+            raise ValueError(f"HTTP {resp.status}")
+        return json.load(resp)
+
+
+@mcp.tool(name="Search_Rental_Cars")
+def search_rental_cars(
+    price_from: Optional[int] = None,
+    price_to: Optional[int] = None,
+    currency_id: int = 1,
+    gear_types: str = "1.2",
+    locs: int = 2,
+    wheel_types: Optional[int] = None
+) -> List[Dict]:
+    """
+    Fetch up to five of the best rental-car listings matching the given filters.
+
+    Args:
+        price_from (int, optional): Minimum daily price. If omitted, no lower bound is applied.
+        price_to (int, optional): Maximum daily price. If omitted, no upper bound is applied.
+        currency_id (int): Currency to use for pricing:
+            - 1 = USD
+            - 3 = GEL
+        gear_types (str): Gearbox types to include, as dot-separated IDs:
+            - "1" = manual
+            - "2" = automatic
+          e.g. "1.2" means both manual and automatic.
+        locs (int, optional): Location ID for pickup. To find valid IDs, call `cars://locations` first.
+        wheel_types (int, optional): Steering-wheel side:
+            - 0 = left
+            - 1 = right
+
+    Returns:
+        List[Dict]: Up to five cars with the lowest USD price. Each dictionary contains:
+            - car_id (int): Internal ID of the car.
+            - model (str): Model code/name.
+            - year (int): Production year.
+            - price_usd (float): Price in USD.
+            - views (int): Total view count (as a proxy for popularity).
+            - link (str): Public URL to the listing (e.g. https://www.myauto.ge/ka/pr/{car_id}).
+    """
+    # -- prepare SSL & cookie-aware opener to mimic a real browser session --
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+
+    cj = http.cookiejar.CookieJar()
+    opener = urllib.request.build_opener(
+        urllib.request.HTTPCookieProcessor(cj)
+    )
+    opener.addheaders = [
+        ("User-Agent",       "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"),
+        ("Accept",           "application/json, text/plain, */*"),
+        ("Accept-Language",  "en-US,en;q=0.9"),
+        ("Referer",          "https://www.myauto.ge/"),
+        ("Origin",           "https://www.myauto.ge"),
+        ("X-Requested-With", "XMLHttpRequest"),
+    ]
+    opener.open("https://www.myauto.ge/ka")  # seed cookies
+
+    base_url = "https://api2.myauto.ge/ka/products"
+    params = {
+        "TypeID":      0,
+        "ForRent":     1,
+        "CurrencyID":  currency_id,
+        "MileageType": 1,
+        "GearTypes":   gear_types
+    }
+    if price_from is not None:
+        params["PriceFrom"] = price_from
+    if price_to is not None:
+        params["PriceTo"] = price_to
+    if locs is not None:
+        params["Locs"] = locs
+    if wheel_types is not None:
+        params["WheelTypes"] = wheel_types
+
+    all_cars = []
+    page = 1
+
+    # Page through until empty result
+    while page < 5:
+        params["Page"] = page
+        qs = urllib.parse.urlencode(params)
+        req = urllib.request.Request(f"{base_url}?{qs}")
+        with opener.open(req) as resp:
+            data = json.load(resp)
+            page_items = data.get("data", {}).get("items", [])
+        if not data:
+            break
+        all_cars.extend(page_items)
+        page += 1
+
+    # Sort by USD price and take the top five
+    top_five = sorted(all_cars, key=lambda c: c.get("price_usd", float("inf")))[:5]
+
+    # Slim down output and add public links
+    results = []
+    for car in top_five:
+        cid = car["car_id"]
+        results.append({
+            "car_id":    cid,
+            "model":     car.get("car_model"),
+            "year":      car.get("prod_year"),
+            "price_usd": car.get("price_usd"),
+            "views":     car.get("views"),
+            "link":      f"https://www.myauto.ge/ka/pr/{cid}"
+        })
+
+    return results
 
 @mcp.tool(name="Open_URL_in_Browser")
 def open_url_in_browser(url: str) -> str:
@@ -246,4 +398,4 @@ def open_url_in_browser(url: str) -> str:
 
 
 if __name__ == "__main__":
-    print(plan_journey("Tbilisi", "Batumi", "today"))
+    print(search_rental_cars(locs=4))
