@@ -1,0 +1,14 @@
+{
+  "name": "akaife-travel-advisor",
+  "version": 2,
+  "buildCommand": "cd akaife-front && npm run build",
+  "outputDirectory": "akaife-front/dist",
+  "installCommand": "cd akaife-front && npm install",
+  "framework": "vite",
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}
